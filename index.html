@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SmartCalc Hub</title>
+<style>
+:root{--bg:#FFFFFF;--alt:#F3F6FA;--card:#FFFFFF;--tx:#202B3C;--mu:#718096;--ac:#174EA6;--ph:#123E85;--navy:#0B1F3A;--ok:#18A874;--bd:#DDE3EB;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+a{color:var(--ac);text-decoration:none}
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--navy);border-bottom:1px solid var(--navy)}header a{color:#fff}header a:hover{text-decoration:underline}
+.logo{font-weight:700;color:#fff;cursor:pointer;display:flex;gap:8px;align-items:center}
+.logo b{background:#fff;color:var(--ac);border-radius:6px;width:24px;height:24px;display:grid;place-items:center;font-size:14px}
+main{max-width:1080px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:clamp(26px,5vw,38px);margin:20px 0 8px;letter-spacing:-.02em}
+.sub{color:var(--mu);margin:0 0 18px}
+input,select,button{font:inherit;color:var(--tx);background:#fff;border:1px solid var(--bd);border-radius:10px;padding:11px 12px;min-height:44px}
+input,select{width:100%}
+button{cursor:pointer;background:var(--card)}button:hover{border-color:var(--ac);background:var(--alt)}
+.pill.on,.pill.on:hover{background:var(--ac);border-color:var(--ac);color:#fff}.pill.on:hover{background:var(--ph)}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;box-shadow:0 2px 10px #0b1f3a14}
+.card h3{margin:6px 0 4px;font-size:16px}.card p{color:var(--mu);margin:0 0 10px;font-size:13px}
+.tag{font-size:11px;color:var(--ac);text-transform:uppercase;letter-spacing:.05em}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fav{min-height:36px;padding:4px 10px}
+.calc{display:grid;gap:18px;grid-template-columns:1fr}
+@media(min-width:800px){.calc{grid-template-columns:1fr 1fr}}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+.res{background:var(--alt);border:1px solid var(--bd);border-radius:14px;padding:16px}
+.res div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--bd)}
+.res div:last-child{border:0}.res b{color:var(--tx)}.res span{color:var(--mu)}
+.res .big b{font-size:22px;color:var(--ac)}
+.err{color:#B42318}
+.note{color:var(--mu);font-size:13px}
+footer{background:var(--alt);border-top:1px solid var(--bd);padding:20px;text-align:center;color:var(--mu);font-size:13px}
+code{background:var(--alt);padding:2px 6px;border-radius:6px;display:inline-block;white-space:normal}
+@media(prefers-reduced-motion:no-preference){.card{transition:border-color .15s}.card:hover{border-color:var(--ac)}}
+</style></head><body>
+<header><div class="logo" onclick="location.hash=''" tabindex="0" role="link"><b>&#9638;</b> SmartCalc Hub</div>
+<nav><a href="#">Browse</a> &nbsp; <a href="#favs">Favorites</a></nav></header>
+<main id="app"></main>
+<footer>Estimates only, not financial, tax or medical advice. Inputs stay in your browser.</footer>
+<script>
+const $=(s,e=document)=>e.querySelector(s);
+const CATS=["Finance & Money","Health & Fitness","Everyday","Business & Construction","Math & Education"];
+const f2=(n,d=2)=>isFinite(n)?n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}):"n/a";
+const $$=n=>isFinite(n)?(n<0?"-":"")+"$"+f2(Math.abs(n)):"n/a";
+const pc=n=>isFinite(n)?f2(n)+"%":"n/a";
+const pmt=(P,r,n)=>r?P*r/(1-Math.pow(1+r,-n)):P/n;
+const ACT=[["Sedentary (1.2)",1.2],["Light (1.375)",1.375],["Moderate (1.55)",1.55],["Active (1.725)",1.725],["Very active (1.9)",1.9]];
+const loanRes=(P,rate,n)=>{const m=pmt(P,rate/1200,n),t=m*n;return[["Monthly payment",$$(m),1],["Total interest",$$(t-P)],["Total repaid",$$(t)]]};
+const need=(v,...k)=>k.some(x=>v[x]===""||isNaN(v[x]));
+// field: [key,label,default,type,opts]; calc returns rows [label,value,big?] or string error
+const C=[
+{id:"mortgage-calculator",n:"Mortgage Calculator",c:0,d:"Monthly payment with tax, insurance and HOA.",k:"home loan house payment",
+ f:[["price","Home price ($)",400000],["down","Down payment (%)",20],["rate","Interest rate (% APR)",6.5],["yrs","Term (years)",30],["tax","Property tax ($/yr)",4800],["ins","Insurance ($/yr)",1500],["hoa","HOA ($/month)",0]],
+ fm:"M = P × r(1+r)^n / ((1+r)^n − 1); r = APR/12, n = years×12. Zero rate: M = P/n.",
+ x:v=>{if(need(v,"price","down","rate","yrs","tax","ins","hoa")||v.price<=0||v.yrs<=0||v.down<0||v.down>=100||v.rate<0)return"Enter a positive price, term, 0–99% down and a non-negative rate.";
+ const dp=v.price*v.down/100,P=v.price-dp,n=v.yrs*12,pi=pmt(P,v.rate/1200,n),all=pi+v.tax/12+v.ins/12+v.hoa;
+ return[["Estimated total monthly",$$(all),1],["Principal & interest",$$(pi)],["Property tax (est.)",$$(v.tax/12)],["Insurance (est.)",$$(v.ins/12)],["HOA",$$(v.hoa)],["Down payment",$$(dp)],["Total interest",$$(pi*n-P)],["Total loan cost",$$(pi*n)]]}},
+{id:"auto-loan-calculator",n:"Auto Loan Calculator",c:0,d:"Financed amount and monthly car payment.",k:"car vehicle",
+ f:[["price","Vehicle price ($)",30000],["down","Down payment ($)",3000],["trade","Trade-in value ($)",5000],["tax","Sales tax (%)",7],["fees","Fees ($)",500],["rate","Interest rate (% APR)",6],["mo","Term (months)",60]],
+ fm:"Financed = Price × (1 + tax) + Fees − Down − Trade-in. Payment uses the amortizing loan formula. Tax is applied to the full price here; some states tax after trade-in.",
+ x:v=>{if(need(v,"price","down","trade","tax","fees","rate","mo")||v.mo<=0||v.rate<0)return"Check inputs: term must be positive and rate non-negative.";
+ const P=v.price*(1+v.tax/100)+v.fees-v.down-v.trade;if(P<=0)return"Down payment and trade-in cover the full cost; nothing to finance.";
+ const m=pmt(P,v.rate/1200,v.mo);return[["Monthly payment",$$(m),1],["Amount financed",$$(P)],["Total interest",$$(m*v.mo-P)],["Total paid",$$(m*v.mo)]]}},
+{id:"loan-calculator",n:"Loan Calculator",c:0,d:"Payment, interest and total repayment for any loan.",k:"personal amortization",
+ f:[["a","Loan amount ($)",15000],["r","Interest rate (% APR)",8],["y","Term (years)",3]],
+ fm:"Monthly payment = P × r(1+r)^n / ((1+r)^n − 1), with r = APR/12 and n = months.",
+ x:v=>need(v,"a","r","y")||v.a<=0||v.y<=0||v.r<0?"Enter a positive amount and term and a non-negative rate.":loanRes(v.a,v.r,v.y*12)},
+{id:"compound-interest-calculator",n:"Compound Interest Calculator",c:0,d:"Growth of savings with regular contributions.",k:"investment savings interest",
+ f:[["p","Initial deposit ($)",10000],["r","Annual rate (%)",7],["n","Compounds per year",12,"sel",[["Annually",1],["Quarterly",4],["Monthly",12],["Daily",365]]],["c","Monthly contribution ($)",200],["t","Years",20]],
+ fm:"A = P(1 + r/n)^(nt). Contributions are simulated monthly, deposited at the end of each month, with interest compounded at the selected frequency (effective monthly rate = (1+r/n)^(n/12) − 1).",
+ x:v=>{if(need(v,"p","r","n","c","t")||v.t<=0||v.r<0)return"Enter a positive duration and non-negative rate.";
+ const mr=Math.pow(1+v.r/100/v.n,v.n/12)-1;let b=v.p;for(let i=0;i<Math.round(v.t*12);i++)b=b*(1+mr)+v.c;
+ const contrib=v.p+v.c*Math.round(v.t*12);return[["Final balance",$$(b),1],["Initial principal",$$(v.p)],["Total contributions",$$(v.c*Math.round(v.t*12))],["Interest earned",$$(b-contrib)]]}},
+{id:"credit-card-payoff-calculator",n:"Credit Card Payoff Calculator",c:0,d:"How long to pay off a balance and the interest cost.",k:"debt apr",
+ f:[["b","Balance ($)",5000],["apr","APR (%)",22],["p","Monthly payment ($)",200]],
+ fm:"Each month: interest = balance × APR/12, then the payment is applied. Months n = −ln(1 − B·r/p) / ln(1 + r).",
+ x:v=>{if(need(v,"b","apr","p")||v.b<=0||v.p<=0||v.apr<0)return"Enter a positive balance and payment.";
+ const r=v.apr/1200;if(v.p<=v.b*r)return"Payment is not greater than monthly interest ("+$$(v.b*r)+"). The balance will not decrease.";
+ let b=v.b,m=0,ti=0;while(b>0.005&&m<1200){const i=b*r;ti+=i;b=b+i-Math.min(v.p,b+i);m++}
+ const d=new Date();d.setMonth(d.getMonth()+m);return[["Months to payoff",m+" ("+f2(m/12,1)+" yrs)",1],["Total interest",$$(ti)],["Total paid",$$(v.b+ti)],["Payoff date",d.toLocaleDateString("en-US",{month:"long",year:"numeric"})]]}},
+{id:"salary-to-hourly-calculator",n:"Salary-to-Hourly Calculator",c:0,d:"Convert annual salary to hourly and other pay periods.",k:"wage pay",
+ f:[["s","Annual salary ($)",75000],["h","Hours per week",40],["w","Weeks per year",52]],
+ fm:"Hourly = Salary ÷ (hours × weeks). Biweekly = Salary ÷ 26, semimonthly = Salary ÷ 24, monthly = Salary ÷ 12. Works for gross or take-home income.",
+ x:v=>need(v,"s","h","w")||v.s<0||v.h<=0||v.w<=0?"Enter positive hours and weeks.":[["Hourly",$$(v.s/(v.h*v.w)),1],["Weekly",$$(v.s/v.w)],["Biweekly",$$(v.s/26)],["Semimonthly",$$(v.s/24)],["Monthly",$$(v.s/12)],["Annual",$$(v.s)]]},
+{id:"sales-tax-calculator",n:"Sales Tax Calculator",c:0,d:"Add tax to a price or back it out of a total.",k:"vat",
+ f:[["a","Amount ($)",100],["r","Tax rate (%)",8.25],["m","Amount is",0,"sel",[["Before tax",0],["Tax-inclusive",1]]]],
+ fm:"Tax = Price × rate/100; Total = Price + Tax. Reverse: Pre-tax = Total ÷ (1 + rate/100).",
+ x:v=>{if(need(v,"a","r")||v.a<0||v.r<0)return"Enter non-negative values.";const pre=v.m?v.a/(1+v.r/100):v.a,t=pre*v.r/100;return[["Total",$$(pre+t),1],["Pre-tax price",$$(pre)],["Tax",$$(t)]]}},
+{id:"bmi-calculator",n:"BMI Calculator",c:1,d:"Body mass index with adult category.",k:"weight height health",
+ f:[["u","Units",0,"sel",[["Metric (cm, kg)",0],["US (in, lb)",1]]],["h","Height",175],["w","Weight",70]],
+ fm:"Metric: BMI = kg / m². US: BMI = 703 × lb / in². BMI is a screening measure, not a diagnosis; adult categories do not apply to children or teens.",
+ x:v=>{if(need(v,"h","w")||v.h<=0||v.w<=0)return"Enter positive height and weight.";const b=v.u?703*v.w/v.h**2:v.w/(v.h/100)**2;
+ const cat=b<18.5?"Underweight":b<25?"Healthy weight":b<30?"Overweight":"Obesity";return[["BMI",f2(b,1),1],["Adult category",cat],["Reference","<18.5 · 18.5–24.9 · 25–29.9 · 30+"]]}},
+{id:"tdee-calculator",n:"TDEE & Calorie Calculator",c:1,d:"Estimate maintenance calories (Mifflin–St Jeor).",k:"calorie bmr metabolism",
+ f:[["a","Age (years)",30],["s","Sex",5,"sel",[["Male",5],["Female",-161]]],["h","Height (cm)",175],["w","Weight (kg)",70],["act","Activity",1.55,"sel",ACT.map(x=>[x[0],x[1]])]],
+ fm:"BMR = 10·kg + 6.25·cm − 5·age + (5 male | −161 female). TDEE = BMR × activity factor. Estimates only; individual needs vary. Not for under-18s.",
+ x:v=>{if(need(v,"a","h","w")||v.a<=0||v.h<=0||v.w<=0)return"Enter positive values.";if(v.a<18)return"This equation is intended for adults (18+).";
+ const b=10*v.w+6.25*v.h-5*v.a+v.s,t=b*v.act;return[["Maintenance (TDEE)",f2(t,0)+" kcal",1],["BMR",f2(b,0)+" kcal"],["Gentle loss (−10%)",f2(t*.9,0)+" kcal"],["Gentle gain (+10%)",f2(t*1.1,0)+" kcal"]]}},
+{id:"percentage-calculator",n:"Percentage Calculator",c:2,d:"Percent of, percent of total and percent change.",k:"percent increase decrease",
+ f:[["x","X",20],["y","Y",150]],
+ fm:"X% of Y = X/100 × Y · X is what % of Y = X/Y × 100 · Change from X to Y = (Y−X)/|X| × 100.",
+ x:v=>{if(need(v,"x","y"))return"Enter both numbers.";return[[v.x+"% of "+v.y,f2(v.x/100*v.y,4).replace(/\.?0+$/,""),1],[v.x+" is what % of "+v.y,v.y?pc(v.x/v.y*100):"undefined (Y is 0)"],["Change from "+v.x+" to "+v.y,v.x?pc((v.y-v.x)/Math.abs(v.x)*100):"undefined (X is 0)"]]}},
+{id:"discount-calculator",n:"Discount Calculator",c:2,d:"Sale price with stacked discounts and tax.",k:"sale coupon savings",
+ f:[["p","Original price ($)",80],["d1","Discount (%)",25],["d2","Extra discount (%)",10],["t","Sales tax (%)",8]],
+ fm:"Discounts apply sequentially: Price × (1 − d1) × (1 − d2), not added together. Tax is applied to the discounted price.",
+ x:v=>{if(need(v,"p","d1","d2","t")||v.p<0||v.d1<0||v.d1>100||v.d2<0||v.d2>100)return"Discounts must be 0–100%.";const a=v.p*(1-v.d1/100),b=a*(1-v.d2/100);
+ return[["Final price",$$(b),1],["Total savings",$$(v.p-b)],["After first discount",$$(a)],["Checkout total with tax",$$(b*(1+v.t/100))]]}},
+{id:"tip-calculator",n:"Tip Calculator",c:2,d:"Tip and split a bill per person.",k:"restaurant split",
+ f:[["b","Bill ($)",85],["t","Tip (%)",18],["n","People",3]],
+ fm:"Tip = Bill × tip%; Total = Bill + Tip; Per person = Total ÷ people. Enter the pre-tax bill if you tip before tax.",
+ x:v=>{if(need(v,"b","t","n")||v.b<0||v.t<0||v.n<1)return"Enter a bill, tip and at least 1 person.";const tip=v.b*v.t/100;return[["Total per person",$$((v.b+tip)/v.n),1],["Tip per person",$$(tip/v.n)],["Tip total",$$(tip)],["Bill total",$$(v.b+tip)]]}},
+{id:"age-calculator",n:"Age Calculator",c:2,d:"Exact age in years, months and days.",k:"birthday date of birth",
+ f:[["dob","Date of birth","1990-06-15","date"],["ref","Reference date",new Date().toISOString().slice(0,10),"date"]],
+ fm:"Calendar subtraction with month borrowing (using the real length of the previous month); leap years are handled by the Date object.",
+ x:v=>{if(!v.dob||!v.ref)return"Enter both dates.";const a=new Date(v.dob+"T00:00"),b=new Date(v.ref+"T00:00");if(a>b)return"Birth date must be on or before the reference date.";
+ let y=b.getFullYear()-a.getFullYear(),m=b.getMonth()-a.getMonth(),d=b.getDate()-a.getDate();if(d<0){m--;d+=new Date(b.getFullYear(),b.getMonth(),0).getDate()}if(m<0){y--;m+=12}
+ let nb=new Date(b.getFullYear(),a.getMonth(),a.getDate());if(nb<=b)nb=new Date(b.getFullYear()+1,a.getMonth(),a.getDate());
+ return[["Age",y+"y "+m+"m "+d+"d",1],["Total days",f2(Math.round((b-a)/864e5),0)],["Next birthday",nb.toDateString()],["Days until",Math.round((nb-b)/864e5)+""]]}},
+{id:"profit-margin-calculator",n:"Profit Margin Calculator",c:3,d:"Gross and net margin versus markup.",k:"markup business profit",
+ f:[["r","Revenue ($)",1000],["c","Cost of goods sold ($)",600],["o","Operating expenses ($)",150]],
+ fm:"Gross profit = Revenue − COGS. Gross margin = Gross profit ÷ Revenue × 100. Net profit = Revenue − COGS − Opex. Markup = Gross profit ÷ COGS × 100 (not the same as margin).",
+ x:v=>{if(need(v,"r","c","o")||v.r<=0||v.c<0||v.o<0)return"Revenue must be positive; costs non-negative.";const g=v.r-v.c,n=g-v.o;
+ return[["Gross margin",pc(g/v.r*100),1],["Gross profit",$$(g)],["Net profit",$$(n)],["Net margin",pc(n/v.r*100)],["Markup",v.c?pc(g/v.c*100):"undefined (cost is 0)"]]}},
+{id:"roi-calculator",n:"ROI Calculator",c:3,d:"Return on investment and annualized ROI.",k:"return investment",
+ f:[["i","Initial investment ($)",10000],["f","Final value / proceeds ($)",13500],["x","Additional costs ($)",200],["y","Holding period (years, optional)",3]],
+ fm:"Net profit = Proceeds − Initial − Additional costs. ROI = Net profit ÷ (Initial + Additional costs) × 100. Annualized = (1 + ROI)^(1/years) − 1.",
+ x:v=>{if(need(v,"i","f","x")||v.i<=0)return"Initial investment must be positive.";const cost=v.i+v.x,n=v.f-cost,roi=n/cost;
+ const rows=[["ROI",pc(roi*100),1],["Net profit/loss",$$(n)],["Total costs",$$(cost)]];if(v.y>0&&1+roi>0)rows.push(["Annualized ROI",pc((Math.pow(1+roi,1/v.y)-1)*100)]);return rows}},
+{id:"income-tax-calculator",n:"Income Tax Calculator",c:0,d:"Illustrative US federal tax estimate (2024 brackets).",k:"federal take-home",
+ f:[["s","Filing status",0,"sel",[["Single",0],["Married filing jointly",1],["Head of household",2]]],["i","Annual income ($)",85000],["a","Additional income ($)",0],["adj","Adjustments, e.g. 401(k) ($)",0],["ded","Deductions ($, 0 = standard)",0]],
+ fm:"Illustrative estimate using 2024 US federal brackets and standard deductions (kept in the TAX data object). Taxable = income + additional − adjustments − deduction; tax is summed per bracket. Federal income tax only: no FICA, state or credits. Verify current-year figures; not tax advice.",
+ x:v=>{if(need(v,"i","a","adj","ded")||v.i<0)return"Enter non-negative income.";const T={std:[14600,29200,21900],R:[.1,.12,.22,.24,.32,.35,.37],th:[[11600,47150,100525,191950,243725,609350,Infinity],[23200,94300,201050,383900,487450,731200,Infinity],[16550,63100,100500,191950,243700,609350,Infinity]]};
+ const g=v.i+v.a,ti=Math.max(0,g-v.adj-(v.ded>0?v.ded:T.std[v.s]));let t=0,p=0;T.th[v.s].forEach((u,k)=>{if(ti>p)t+=(Math.min(ti,u)-p)*T.R[k];p=u});
+ return[["Estimated federal tax",$$(t),1],["Taxable income",$$(ti)],["Effective rate (on gross)",g?pc(t/g*100):"n/a"],["Take-home (after federal tax)",$$(g-t)],["Monthly take-home",$$((g-t)/12)]]}},
+{id:"budget-calculator",n:"Budget Calculator",c:0,d:"Track spending and compare with the 50/30/20 guideline.",k:"expenses savings",
+ f:[["inc","Monthly after-tax income ($)",5000],["h","Housing",1500],["u","Utilities",200],["f","Food",600],["t","Transportation",300],["ins","Insurance",200],["debt","Debt payments",250],["e","Entertainment",300],["sav","Savings",500],["cu","Custom expenses (one per line: name, amount)","Gym, 40\nSubscriptions, 25","txt"]],
+ fm:"Remaining = Income − Expenses. Savings rate = Savings ÷ Income. 50/30/20 is a rough guideline: needs (housing, utilities, food, transport, insurance, debt) 50%, wants (entertainment, custom) 30%, savings 20%. A suggestion, not financial advice.",
+ x:v=>{if(need(v,"inc","h","u","f","t","ins","debt","e","sav")||v.inc<=0)return"Enter a positive income and numeric amounts.";let cu=0;for(const l of v.cu.split("\n").filter(x=>x.trim())){const a=+l.split(",")[1];if(isNaN(a))return"Custom line needs the form: name, amount";cu+=a}
+ const nd=v.h+v.u+v.f+v.t+v.ins+v.debt,w=v.e+cu,tot=nd+w+v.sav;return[["Remaining balance",$$(v.inc-tot),1],["Total expenses",$$(tot)],["Savings rate",pc(v.sav/v.inc*100)],["Needs (actual / 50%)",$$(nd)+" / "+$$(v.inc*.5)],["Wants (actual / 30%)",$$(w)+" / "+$$(v.inc*.3)],["Savings (actual / 20%)",$$(v.sav)+" / "+$$(v.inc*.2)]]}},
+{id:"retirement-calculator",n:"Retirement Calculator",c:0,d:"Project savings growth to your retirement age.",k:"401k pension nest egg",
+ f:[["a","Current age",35],["ra","Retirement age",65],["s","Current savings ($)",50000],["m","Monthly contribution ($)",800],["r","Expected annual return (%)",6],["inf","Inflation (%, optional)",2.5]],
+ fm:"Monthly simulation: balance = balance × (1 + r/12) + contribution (end of month). Today’s dollars = balance ÷ (1 + inflation)^years. Returns are assumptions, not guarantees.",
+ x:v=>{if(need(v,"a","ra","s","m","r","inf")||v.s<0||v.m<0)return"Check inputs.";if(v.ra<=v.a)return"Retirement age must be greater than current age.";const n=Math.round((v.ra-v.a)*12);let b=v.s;for(let i=0;i<n;i++)b=b*(1+v.r/1200)+v.m;const c=v.s+v.m*n;
+ return[["Projected balance",$$(b),1],["Total contributions",$$(c)],["Investment growth",$$(b-c)],["In today’s dollars",$$(b/Math.pow(1+v.inf/100,n/12))]]}},
+{id:"calorie-calculator",n:"Calorie Calculator",c:1,d:"Daily calorie target for your goal (Mifflin–St Jeor).",k:"diet weight loss gain",
+ f:[["a","Age (years)",30],["s","Sex",5,"sel",[["Male",5],["Female",-161]]],["h","Height (cm)",175],["w","Weight (kg)",70],["act","Activity",1.55,"sel",ACT],["g","Goal",0,"sel",[["Lose ~0.5 kg/week",-500],["Lose ~0.25 kg/week",-250],["Maintain",0],["Gain ~0.25 kg/week",250]]]],
+ fm:"BMR = 10·kg + 6.25·cm − 5·age + (5 | −161). Maintenance = BMR × activity. Target = maintenance + goal adjustment (~7,700 kcal ≈ 1 kg). Estimates only; adults 18+; consult a professional.",
+ x:v=>{if(need(v,"a","h","w")||v.a<=0||v.h<=0||v.w<=0)return"Enter positive values.";if(v.a<18)return"Intended for adults (18+).";const b=10*v.w+6.25*v.h-5*v.a+v.s,m=b*v.act,t=m+v.g,fl=v.s===5?1500:1200;
+ const r=[["Daily target",f2(Math.max(t,fl),0)+" kcal",1],["Maintenance",f2(m,0)+" kcal"],["Resting (BMR)",f2(b,0)+" kcal"]];if(t<fl)r.push(["Note","Target raised to a conservative floor of "+fl+" kcal"]);return r}},
+{id:"body-fat-calculator",n:"Body Fat Calculator",c:1,d:"US Navy circumference method estimate.",k:"body fat percentage navy",
+ f:[["s","Sex",0,"sel",[["Male",0],["Female",1]]],["u","Units",0,"sel",[["Centimeters",0],["Inches",1]]],["h","Height",178],["w","Waist (at navel)",85],["n","Neck",38],["hip","Hip (women only)",95]],
+ fm:"Navy (cm): Men = 495 / (1.0324 − 0.19077·log10(waist − neck) + 0.15456·log10(height)) − 450. Women = 495 / (1.29579 − 0.35004·log10(waist + hip − neck) + 0.22100·log10(height)) − 450. A rough estimate, not clinical.",
+ x:v=>{if(need(v,"h","w","n")||v.h<=0||v.n<=0)return"Enter positive measurements.";if(v.s&&(need(v,"hip")||v.hip<=0))return"Hip is required for women.";const k=v.u?2.54:1,h=v.h*k,w=v.w*k,n=v.n*k,hp=v.hip*k;const d=v.s?w+hp-n:w-n;if(d<=0)return"Waist must exceed neck (men) or waist + hip must exceed neck (women).";
+ const bf=v.s?495/(1.29579-.35004*Math.log10(d)+.221*Math.log10(h))-450:495/(1.0324-.19077*Math.log10(d)+.15456*Math.log10(h))-450;return[["Estimated body fat",pc(bf),1],["Method","US Navy"],["Limits","Error can be several points"]]}},
+{id:"sleep-calculator",n:"Sleep Calculator",c:1,d:"Find a bedtime or wake-up time for your target sleep.",k:"bedtime wake sleep cycle",
+ f:[["m","Mode",0,"sel",[["I need to wake at…",0],["I go to bed at…",1]]],["t","Time","07:00","time"],["d","Desired sleep (hours)",7.5],["l","Minutes to fall asleep",15]],
+ fm:"Bedtime = wake − sleep − fall-asleep time; wake = bedtime + fall-asleep + sleep, using clock arithmetic mod 24h. Alternatives shift duration by 90-minute steps. Sleep timing is approximate, not a quality predictor.",
+ x:v=>{if(!v.t||need(v,"d","l")||v.d<=0||v.l<0)return"Enter a time, positive duration and non-negative minutes.";const [H,M]=v.t.split(":").map(Number),t0=H*60+M,hm=x=>{x=((Math.round(x)%1440)+1440)%1440;const h=Math.floor(x/60);return(h%12||12)+":"+String(x%60).padStart(2,"0")+(h<12?" AM":" PM")};
+ return[v.d,v.d-1.5,v.d+1.5,v.d-3].filter(x=>x>0).map((d,i)=>[f2(d,1).replace(/\.0$/,"")+" h of sleep"+(i?"":" (selected)"),hm(v.m?t0+v.l+d*60:t0-v.l-d*60),!i])}},
+{id:"date-calculator",n:"Date Calculator",c:2,d:"Days between dates, or add/subtract days, weeks, months, years.",k:"days between add subtract",
+ f:[["m","Mode",0,"sel",[["Days between two dates",0],["Add to date 1",1],["Subtract from date 1",-1]]],["d1","Date 1","2026-01-31","date"],["d2","Date 2 (between mode)","2026-12-25","date"],["n","Amount",1],["u","Unit",1,"sel",[["Days",1],["Weeks",7],["Months",30],["Years",365]]],["inc","Count days",0,"sel",[["Exclusive",0],["Inclusive",1]]]],
+ fm:"Days = (date2 − date1) at local midnight. Months/years use calendar arithmetic; if the target month is shorter the day is clamped to month-end (Jan 31 + 1 month = Feb 28/29).",
+ x:v=>{if(!v.d1)return"Enter date 1.";const a=new Date(v.d1+"T00:00"),dd=(p,q)=>Math.round((q-p)/864e5),wk=n=>Math.floor(Math.abs(n)/7)+" weeks "+Math.abs(n)%7+" days";
+ if(!v.m){if(!v.d2)return"Enter date 2.";const b=new Date(v.d2+"T00:00");let n=dd(a,b);n+=n>=0?v.inc:-v.inc;return[["Days",f2(n,0),1],["Weeks",wk(n)]]}
+ if(need(v,"n")||!Number.isInteger(v.n))return"Amount must be a whole number.";let r;if(v.u<30)r=new Date(a.getFullYear(),a.getMonth(),a.getDate()+v.m*v.n*v.u);else{const mo=v.m*v.n*(v.u===30?1:12),z=new Date(a.getFullYear(),a.getMonth()+mo,1);z.setDate(Math.min(a.getDate(),new Date(z.getFullYear(),z.getMonth()+1,0).getDate()));r=z}
+ const n=dd(a,r);return[["Resulting date",r.toDateString(),1],["Elapsed days",f2(Math.abs(n),0)],["As weeks",wk(n)]]}},
+{id:"scientific-calculator",n:"Scientific Calculator",c:4,d:"Type an expression: trig, logs, powers, factorials, parentheses.",k:"math sin cos log sqrt",
+ f:[["e","Expression","sin(30)+2^3*(4+1)!/10","s"],["deg","Angles",1,"sel",[["Degrees",1],["Radians",0]]]],
+ fm:"Safe recursive-descent parser (no eval). Operators + − × ÷ ^ ! % ( ). Functions: sin cos tan asin acos atan log ln sqrt cbrt abs. Constants: pi, e. Factorial needs an integer 0–170; % divides by 100.",
+ x:v=>{try{let s=v.e.replace(/\s+/g,"").replace(/π/g,"pi").replace(/×/g,"*").replace(/÷/g,"/"),i=0;if(!s)return"Enter an expression.";const E=m=>{throw new Error(m)},R=x=>v.deg?x*Math.PI/180:x,B=x=>v.deg?x*180/Math.PI:x,D=x=>{if(Math.abs(x)>1)E("Domain error");return x};
+ const F={sin:x=>Math.sin(R(x)),cos:x=>Math.cos(R(x)),tan:x=>Math.tan(R(x)),asin:x=>B(Math.asin(D(x))),acos:x=>B(Math.acos(D(x))),atan:x=>B(Math.atan(x)),log:x=>x>0?Math.log10(x):E("Domain error"),ln:x=>x>0?Math.log(x):E("Domain error"),sqrt:x=>x>=0?Math.sqrt(x):E("Domain error"),cbrt:Math.cbrt,abs:Math.abs};
+ const ex=()=>{let a=tm();while(s[i]==="+"||s[i]==="-"){a=s[i++]==="+"?a+tm():a-tm()}return a},tm=()=>{let a=un();while(s[i]==="*"||s[i]==="/"){if(s[i++]==="*")a*=un();else{const d=un();if(!d)E("Division by zero");a/=d}}return a},
+ un=()=>s[i]==="-"?(i++,-un()):s[i]==="+"?(i++,un()):pw(),pw=()=>{const b=po();if(s[i]==="^"){i++;return Math.pow(b,un())}return b},
+ po=()=>{let a=pr();while(s[i]==="!"||s[i]==="%"){if(s[i++]==="%")a/=100;else{if(a<0||!Number.isInteger(a)||a>170)E("Factorial needs an integer 0–170");let f=1;for(let k=2;k<=a;k++)f*=k;a=f}}return a},
+ cl=()=>{if(s[i++]!==")")E("Missing )")},pr=()=>{if(s[i]==="("){i++;const a=ex();cl();return a}let m=/^[a-z]+/.exec(s.slice(i));if(m){const n=m[0];i+=n.length;if(n==="pi")return Math.PI;if(n==="e")return Math.E;if(!F[n])E("Unknown: "+n);if(s[i++]!=="(")E("Missing (");const a=ex();cl();return F[n](a)}m=/^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/i.exec(s.slice(i));if(!m)E("Unexpected "+(s[i]||"end"));i+=m[0].length;return+m[0]};
+ const r=ex();if(i<s.length)E("Unexpected "+s[i]);if(!isFinite(r))E("Result out of range");return[["Result",(+r.toPrecision(12)).toLocaleString("en-US",{maximumFractionDigits:10}),1]]}catch(x){return x.message}}},
+{id:"gpa-calculator",n:"GPA Calculator",c:4,d:"Credit-weighted GPA from your courses.",k:"grades college school",
+ f:[["sc","Grading scale",1,"sel",[["4.0 with plus/minus",1],["4.0 whole letters (A–F)",0]]],["co","Courses (one per line: name, grade, credits)","Calculus, A, 4\nHistory, B+, 3\nChemistry, B-, 4\nSeminar, 3.5, 1","txt"]],
+ fm:"GPA = Σ(grade points × credits) ÷ Σ credits. Scale: A 4.0, A− 3.7, B+ 3.3, B 3.0, B− 2.7, C+ 2.3, C 2.0, C− 1.7, D+ 1.3, D 1.0, F 0. You can also enter grade points (e.g. 3.5). Remove a course by deleting its line.",
+ x:v=>{const M={A:4,"A-":3.7,"B+":3.3,B:3,"B-":2.7,"C+":2.3,C:2,"C-":1.7,"D+":1.3,D:1,"D-":.7,F:0};let q=0,c=0;const rows=[];for(const l of v.co.split("\n").filter(x=>x.trim())){const p=l.split(",").map(x=>x.trim());let g=p[1].toUpperCase();g=g in M?(v.sc?M[g]:M[g[0]]):+p[1];const cr=+p[2];if(p.length<3||isNaN(g)||isNaN(cr)||cr<=0||g<0)return"Bad line: "+l;q+=g*cr;c+=cr;rows.push([p[0],f2(g,1)+" × "+cr])}
+ if(!c)return"Add at least one course.";return[["GPA",f2(q/c),1],["Total credits",f2(c,1)],...rows]}},
+{id:"fraction-calculator",n:"Fraction Calculator",c:4,d:"Add, subtract, multiply, divide and simplify fractions.",k:"mixed number decimal",
+ f:[["a","Fraction A (e.g. 3/4 or 1 1/2)","3/4","s"],["o","Operation",0,"sel",[["Add",0],["Subtract",1],["Multiply",2],["Divide",3],["Simplify A only",4]]],["b","Fraction B","5/6","s"]],
+ fm:"Exact integer arithmetic: a/b + c/d = (ad + cb)/bd; a/b × c/d = ac/bd; a/b ÷ c/d = ad/bc. Results reduced by the greatest common divisor.",
+ x:v=>{const pf=s=>{s=s.trim();let m=/^(-?)(\d+)\s+(\d+)\/(\d+)$/.exec(s),n,d;if(m){d=+m[4];n=(+m[2]*d+ +m[3])*(m[1]?-1:1)}else if(m=/^(-?\d+)(?:\/(-?\d+))?$/.exec(s)){n=+m[1];d=m[2]===undefined?1:+m[2]}else return null;return[n,d]};
+ const A=pf(v.a),B=v.o<4?pf(v.b):[0,1];if(!A||!B)return"Use whole numbers like 3/4, -2/5 or 1 1/2.";if(!A[1]||!B[1])return"Denominator cannot be zero.";
+ let n,d;const[a,b]=A,[c,e]=B;if(v.o===0)[n,d]=[a*e+c*b,b*e];else if(v.o===1)[n,d]=[a*e-c*b,b*e];else if(v.o===2)[n,d]=[a*c,b*e];else if(v.o===3){if(!c)return"Cannot divide by zero.";[n,d]=[a*e,b*c]}else[n,d]=[a,b];
+ const g=(x,y)=>y?g(y,x%y):Math.abs(x),k=g(n,d)||1;n/=k;d/=k;if(d<0){n=-n;d=-d}const w=Math.trunc(n/d),mx=d!==1&&Math.abs(n)>=d?w+" "+Math.abs(n)%d+"/"+d:null;
+ return[["Result",d===1?""+n:n+"/"+d,1],["Mixed number",mx||(d===1?""+n:n+"/"+d)],["Decimal",String(+(n/d).toFixed(8))]]}},
+{id:"area-volume-calculator",n:"Area & Volume Calculator",c:4,d:"Area, perimeter, surface area and volume of common shapes.",k:"geometry circle sphere cylinder cone",
+ f:[["s","Shape (A, B, C are the dimensions)",0,"sel",[["Square (A side)",0],["Rectangle (A, B)",1],["Triangle (A, B, C sides)",2],["Circle (A radius)",3],["Parallelogram (A base, B side, C height)",4],["Trapezoid (A, B bases, C height)",5],["Cube (A edge)",6],["Rectangular prism (A, B, C)",7],["Cylinder (A radius, B height)",8],["Sphere (A radius)",9],["Cone (A radius, B height)",10]]],["a","Dimension A",5],["b","Dimension B",4],["c","Dimension C",3],["u","Unit label","cm","s"]],
+ fm:"Square a² · Rectangle ab · Triangle (Heron) √(s(s−a)(s−b)(s−c)) · Circle πr² · Parallelogram base×height · Trapezoid (a+b)/2·h · Cube 6a², a³ · Prism 2(ab+bc+ac), abc · Cylinder 2πr(r+h), πr²h · Sphere 4πr², 4/3πr³ · Cone πr(r+√(r²+h²)), πr²h/3.",
+ x:v=>{const N=[1,2,3,1,3,3,1,3,2,1,2][v.s],ds=[v.a,v.b,v.c].slice(0,N);if(ds.some(x=>x===""||isNaN(x)||x<=0))return"Enter positive values for the dimensions used by this shape.";const[a,b,c]=[v.a,v.b,v.c],P=Math.PI,u=v.u||"units",A=x=>f2(x)+" "+u+"²",V=x=>f2(x)+" "+u+"³",L=x=>f2(x)+" "+u;
+ switch(+v.s){case 0:return[["Area",A(a*a),1],["Perimeter",L(4*a)]];case 1:return[["Area",A(a*b),1],["Perimeter",L(2*(a+b))]];case 2:{if(a+b<=c||a+c<=b||b+c<=a)return"Sides must satisfy the triangle inequality.";const s=(a+b+c)/2;return[["Area",A(Math.sqrt(s*(s-a)*(s-b)*(s-c))),1],["Perimeter",L(a+b+c)]]}
+ case 3:return[["Area",A(P*a*a),1],["Circumference",L(2*P*a)]];case 4:return[["Area",A(a*c),1],["Perimeter",L(2*(a+b))]];case 5:return[["Area",A((a+b)/2*c),1],["Perimeter","needs leg lengths"]];case 6:return[["Volume",V(a**3),1],["Surface area",A(6*a*a)]];case 7:return[["Volume",V(a*b*c),1],["Surface area",A(2*(a*b+b*c+a*c))]];
+ case 8:return[["Volume",V(P*a*a*b),1],["Surface area",A(2*P*a*(a+b))]];case 9:return[["Volume",V(4/3*P*a**3),1],["Surface area",A(4*P*a*a)]];default:return[["Volume",V(P*a*a*b/3),1],["Surface area",A(P*a*(a+Math.hypot(a,b)))]]}}},
+{id:"equation-solver",n:"Equation Solver",c:4,d:"Linear, quadratic and 2×2 systems with steps.",k:"algebra quadratic roots",
+ f:[["m","Type",1,"sel",[["Linear: ax + b = c",0],["Quadratic: ax² + bx + c = 0",1],["System: ax + by = c, dx + ey = f",2]]],["a","a",1],["b","b",-3],["c","c",2],["d","d (system)",1],["e","e (system)",-1],["f","f (system)",1]],
+ fm:"Linear x = (c − b)/a. Quadratic: Δ = b² − 4ac; x = (−b ± √Δ)/2a; Δ<0 gives complex roots. System (Cramer’s rule): D = ae − bd; x = (ce − bf)/D; y = (af − cd)/D.",
+ x:v=>{if(need(v,"a","b","c"))return"Enter coefficients.";const g=n=>String(+n.toFixed(6)),{a,b,c}=v;
+ if(v.m==0){if(!a)return b===c?"Infinitely many solutions":"No solution";return[["x",g((c-b)/a),1],["Step 1","ax = c − b = "+g(c-b)],["Step 2","x = "+g(c-b)+" ÷ "+g(a)]]}
+ if(v.m==1){if(!a)return"a = 0: this is linear, use the Linear type.";const D=b*b-4*a*c,r=[["Discriminant Δ",g(D)]];if(D>0){const s=Math.sqrt(D);return[["x₁",g((-b+s)/(2*a)),1],["x₂",g((-b-s)/(2*a)),1],...r,["Nature","Two real roots"]]}if(D===0)return[["x (repeated)",g(-b/(2*a)),1],...r];const s=Math.sqrt(-D)/(2*a);return[["x₁",g(-b/(2*a))+" + "+g(Math.abs(s))+"i",1],["x₂",g(-b/(2*a))+" − "+g(Math.abs(s))+"i",1],...r,["Nature","Complex roots, no real roots"]]}
+ if(need(v,"d","e","f"))return"Enter all six coefficients.";const{d,e,f}=v,D=a*e-b*d;if(!D){return(a*f-c*d===0&&b*f-c*e===0)?"Dependent: infinitely many solutions":"Inconsistent: no solution"}return[["x",g((c*e-b*f)/D),1],["y",g((a*f-c*d)/D),1],["Determinant D",g(D)]]}},
+{id:"freelance-rate-calculator",n:"Freelance Rate Calculator",c:3,d:"Hourly rate needed to reach your take-home goal.",k:"hourly rate consultant contractor",
+ f:[["t","Desired take-home ($/yr)",70000],["e","Business expenses ($/yr)",6000],["ben","Benefits allowance ($/yr)",8000],["tx","Effective tax rate (%)",25],["h","Billable hours per week",25],["w","Working weeks per year",46]],
+ fm:"Revenue = (take-home + benefits) ÷ (1 − tax rate) + expenses. Rate = Revenue ÷ (billable hours × weeks). Taxes and billable hours vary; this is a planning estimate.",
+ x:v=>{if(need(v,"t","e","ben","tx","h","w")||v.tx<0||v.tx>=100||v.h<=0||v.w<=0)return"Tax must be 0–99%; hours and weeks positive.";const R=(v.t+v.ben)/(1-v.tx/100)+v.e;return[["Required hourly rate",$$(R/(v.h*v.w)),1],["Annual revenue needed",$$(R)],["Weekly target",$$(R/v.w)],["Monthly target",$$(R/12)]]}},
+{id:"product-pricing-calculator",n:"Product Pricing Calculator",c:3,d:"Price a product to hit your target margin.",k:"unit cost selling price fees",
+ f:[["mat","Materials ($/unit)",6],["lh","Labor hours/unit",0.5],["lr","Labor rate ($/hr)",20],["pk","Packaging ($)",1],["oh","Overhead ($/unit)",1.5],["ot","Other costs ($)",0],["m","Target margin (%)",40],["fee","Platform + payment fees (% of price)",9],["q","Units sold",100]],
+ fm:"Unit cost = materials + labor + packaging + overhead + other. Price = Unit cost ÷ (1 − margin − fee%). Margin = profit ÷ price; markup = profit ÷ cost; break-even = cost ÷ (1 − fee%).",
+ x:v=>{if(need(v,"mat","lh","lr","pk","oh","ot","m","fee","q"))return"Enter all values.";if(v.m+v.fee>=100)return"Margin + fees must be below 100%.";const c=v.mat+v.lh*v.lr+v.pk+v.oh+v.ot,p=c/(1-(v.m+v.fee)/100),pr=p*(1-v.fee/100)-c;
+ return[["Suggested price",$$(p),1],["Unit cost",$$(c)],["Profit per unit",$$(pr)],["Margin",pc(pr/p*100)],["Markup",c?pc(pr/c*100):"n/a"],["Break-even price",$$(c/(1-v.fee/100))],["Profit at "+v.q+" units",$$(pr*v.q)]]}},
+{id:"construction-material-calculator",n:"Construction Material Calculator",c:3,d:"Concrete, flooring, paint and gravel estimates.",k:"concrete tile paint gravel",
+ f:[["m","Project",0,"sel",[["Concrete slab",0],["Flooring / tile",1],["Paint (walls)",2],["Gravel / fill",3]]],["u","Length unit",0,"sel",[["Feet",0],["Meters",1]]],["l","Length",20],["w","Width",12],["t","Thickness (in) / wall height (ft or m)",4],["cov","Coverage per unit (sq ft per box/gallon)",20],["co","Coats (paint)",2],["wa","Waste (%)",10],["pr","Price per purchase unit ($, optional)",0]],
+ fm:"Area = L × W. Concrete/gravel volume = L × W × thickness ÷ 12 (ft³), ÷ 27 = yd³. Flooring: boxes = area × (1 + waste) ÷ coverage. Paint: wall area = 2(L+W) × height; gallons = area × coats × (1 + waste) ÷ coverage (≈350 typical). Gravel tons ≈ yd³ × 1.4 (varies). Confirm structural specs and manufacturer coverage.",
+ x:v=>{if(need(v,"l","w","t","cov","co","wa","pr")||v.l<=0||v.w<=0||v.t<=0||v.cov<=0||v.wa<0)return"Enter positive dimensions and coverage.";const k=v.u?3.28084:1,L=v.l*k,W=v.w*k,f=1+v.wa/100,cost=n=>v.pr>0?[["Estimated cost",$$(n*v.pr)]]:[];
+ if(v.m==0||v.m==3){const y=L*W*v.t/12/27,b=Math.ceil(y*f*100)/100;return[["Purchase quantity",f2(b)+" yd³",1],["Area",f2(L*W)+" ft²"],["Volume",f2(y)+" yd³ ("+f2(y*27)+" ft³)"],...(v.m?[["Approx. weight",f2(b*1.4)+" tons"]]:[]),...cost(b)]}
+ if(v.m==1){const a=L*W,n=Math.ceil(a*f/v.cov);return[["Boxes to buy",n+"",1],["Area",f2(a)+" ft²"],["With waste",f2(a*f)+" ft²"],...cost(n)]}
+ const a=2*(L+W)*v.t*k,g=a*v.co*f/v.cov;return[["Gallons to buy",Math.ceil(g*4)/4+"",1],["Wall area",f2(a)+" ft²"],["Exact need",f2(g)+" gal"],...cost(Math.ceil(g))]}}
+];
+const CS=JSON.parse?C:0;
+let fav=[],rec=[];
+try{fav=JSON.parse(localStorage.getItem("fav")||"[]");rec=JSON.parse(localStorage.getItem("rec")||"[]")}catch(e){}
+const save=()=>{try{localStorage.setItem("fav",JSON.stringify(fav));localStorage.setItem("rec",JSON.stringify(rec))}catch(e){}};
+const tog=id=>{fav=fav.includes(id)?fav.filter(x=>x!==id):[...fav,id];save();route()};
+let q="",cat=-1;
+const card=c=>`<div class="card"><div class="row"><span class="tag">${CATS[c.c]}</span><button class="fav" aria-label="Toggle favorite" onclick="tog('${c.id}')">${fav.includes(c.id)?"★":"☆"}</button></div><h3>${c.n}</h3><p>${c.d}</p><a href="#${c.id}">Open Calculator →</a></div>`;
+function home(favOnly){
+ const list=C.filter(c=>(!favOnly||fav.includes(c.id))&&(cat<0||c.c===cat)&&(c.n+c.d+c.k+CATS[c.c]).toLowerCase().includes(q.toLowerCase()));
+ const r=rec.map(i=>C.find(c=>c.id===i)).filter(Boolean);
+ $("#app").innerHTML=`${favOnly?"<h1>Favorites</h1>":`<h1>Every Calculation. One Smart Hub.</h1><p class="sub">Free online calculators for your money, health, and everyday needs.</p>`}
+ <input id="q" type="search" placeholder="Search ${C.length} free calculators..." aria-label="Search calculators" value="${q}">
+ <div class="pills"><button class="pill ${cat<0?"on":""}" onclick="cat=-1;home(${favOnly})">All (${C.length})</button>${CATS.map((n,i)=>`<button class="pill ${cat===i?"on":""}" onclick="cat=${i};home(${favOnly})">${n} (${C.filter(c=>c.c===i).length})</button>`).join("")}</div>
+ ${!favOnly&&r.length&&!q?`<h2>Recently viewed</h2><div class="grid">${r.slice(0,4).map(card).join("")}</div><h2>All calculators</h2>`:""}
+ <div class="grid">${list.map(card).join("")||`<p class="note">${favOnly?"No favorites yet. Tap ☆ on a calculator.":"No calculators match your search."}</p>`}</div>`;
+ const i=$("#q");i.oninput=()=>{q=i.value;const p=i.selectionStart;home(favOnly);const j=$("#q");j.focus();j.setSelectionRange(p,p)};
+}
+function page(c){
+ rec=[c.id,...rec.filter(x=>x!==c.id)].slice(0,8);save();document.title=c.n+" | SmartCalc Hub";
+ const fields=c.f.map(([k,l,d,t,o])=>t==="sel"?`<label for="${k}">${l}</label><select id="${k}">${o.map(([n,v])=>`<option value="${v}" ${v==d?"selected":""}>${n}</option>`).join("")}</select>`
+ :t==="txt"?`<label for="${k}">${l}</label><textarea id="${k}" rows="6" style="width:100%;font:inherit;color:inherit;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px">${d}</textarea>`:`<label for="${k}">${l}</label><input id="${k}" ${t==="date"||t==="time"?`type="${t}"`:t==="s"?'type="text"':'type="number" step="any" inputmode="decimal"'} value="${d}">`).join("");
+ $("#app").innerHTML=`<p class="note"><a href="#">Home</a> › ${CATS[c.c]} › ${c.n}</p><h1>${c.n}</h1><p class="sub">${c.d}</p>
+ <div class="calc"><div class="card"><div>${fields}</div><div class="pills"><button id="reset">Reset</button><button id="copy">Copy results</button><button id="share">Share</button></div></div>
+ <div><div class="res" id="out" aria-live="polite"></div></div></div>
+ <div class="card" style="margin-top:18px"><h3>Formula &amp; assumptions</h3><p><code>${c.fm}</code></p><p class="note">Results are estimates based on the inputs and assumptions above, not professional advice.</p></div>
+ <h2>Related calculators</h2><div class="grid">${C.filter(x=>x.c===c.c&&x!==c).slice(0,3).map(card).join("")}</div>`;
+ const read=()=>{const v={};c.f.forEach(([k,,,t])=>{const e=$("#"+k);v[k]=["date","time","txt","s"].includes(t)?e.value:e.value===""?"":+e.value});return v};
+ let txt="";
+ const run=()=>{const r=c.x(read());if(typeof r==="string"){txt="";$("#out").innerHTML=`<p class="err">${r}</p>`;return}
+ txt=c.n+"\n"+r.map(x=>x[0]+": "+x[1]).join("\n");$("#out").innerHTML=r.map(x=>`<div class="${x[2]?"big":""}"><span>${x[0]}</span><b>${x[1]}</b></div>`).join("")};
+ c.f.forEach(([k])=>{$("#"+k).oninput=run;$("#"+k).onchange=run});run();
+ $("#reset").onclick=()=>{c.f.forEach(([k,,d])=>$("#"+k).value=d);run()};
+ const flash=(id,m)=>{const b=$(id),o=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=o,1500)};
+ $("#copy").onclick=async()=>{try{await navigator.clipboard.writeText(txt);flash("#copy","Copied!")}catch(e){const t=document.createElement("textarea");t.value=txt;document.body.appendChild(t);t.select();try{document.execCommand("copy");flash("#copy","Copied!")}catch(_){flash("#copy","Copy failed")}t.remove()}};
+ $("#share").onclick=async()=>{try{if(navigator.share)await navigator.share({title:c.n,text:txt,url:location.href});else{await navigator.clipboard.writeText(location.href);flash("#share","Link copied")}}catch(e){flash("#share","Unavailable")}};
+}
+function route(){const h=location.hash.slice(1);window.scrollTo(0,0);document.title="SmartCalc Hub";
+ const c=C.find(x=>x.id===h);if(c)page(c);else if(h==="favs")home(true);else if(!h||h==="all")home(false);else $("#app").innerHTML=`<h1>Page not found</h1><p class="sub">That calculator does not exist.</p><a href="#">Back to all calculators</a>`}
+window.addEventListener("hashchange",route);route();
+</script></body></html>
